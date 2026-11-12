@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>A journey through Europe in 1955</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Turf.js for real-time GeoJSON spatial polygon dissolve & merging -->
+  <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #0f172a;
+      color: #f8fafc;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    #map {
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+    /* Custom Leaflet Tooltip Styling */
+    .country-hover-tooltip {
+      background-color: #0f172a;
+      border: 1px solid #334155;
+      color: #f8fafc;
+      font-weight: 600;
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+    .country-hover-tooltip::before {
+      border-top-color: #0f172a;
+    }
+    /* Leaflet Popup Styling Override */
+    .leaflet-popup-content-wrapper {
+      background: #1e293b;
+      color: #f8fafc;
+      border-radius: 12px;
+      padding: 4px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+      border: 1px solid #334155;
+    }
+    .leaflet-popup-tip {
+      background: #1e293b;
+    }
+    /* Loading overlay styles */
+    #loading-screen {
+      transition: opacity 0.4s ease-out;
+    }
+  </style>
+</head>
+<body class="overflow-hidden">
+  <!-- Header Banner -->
+  <header class="bg-slate-900 border-b border-slate-800 px-6 py-4 flex flex-col md:flex-row items-start md:items-center justify-between z-10 shadow-md gap-4">
+    <div class="flex items-start space-x-3.5 max-w-4xl">
+      <div class="bg-blue-500/10 p-2 rounded-lg border border-blue-500/20 text-blue-400 mt-0.5 shrink-0">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+        </svg>
+      </div>
+      <div>
+        <h1 class="font-bold text-lg text-slate-100 tracking-tight">Two Brother's Journey Through Europe in 1955</h1>
+
+      </div>
+    </div>
+         
+    <div class="flex items-center space-x-3 text-xs text-slate-400 shrink-0 self-start md:self-center">
+      <div class="flex items-center space-x-1.5 bg-slate-800 px-3 py-1.5 rounded-full border border-slate-700">
+
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Map Canvas Container -->
+  <main class="relative flex-1 w-full">
+    <!-- Loading Screen Overlay -->
+    <div id="loading-screen" class="absolute inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex flex-col items-center justify-center text-center p-6">
+      <div class="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mb-4"></div>
+      <h2 class="text-lg font-semibold text-slate-200">Reconstructing 1955 Historical Borders...</h2>
+      <p class="text-xs text-slate-400 max-w-sm mt-1">Merging spatial polygons for FPR Yugoslavia, stitching high-resolution GIS boundaries.</p>
+    </div>
+    <!-- Map Div -->
+    <div id="map"></div>
+  </main>
+
+  <!-- JavaScript Map Logic -->
+  <script>
+    // 1. Initialize Map
+    const map = L.map('map', {
+      center: [45.5, 12.0],
+      zoom: 6,
+      zoomControl: true
+    });
+
+    // 2. Base Tile Layer - Mapbox Streets
+    const baseTileLayer = L.tileLayer('https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/{z}/{x}/{y}{r}?access_token=pk.eyJ1IjoiYWlzc2Fldml0Y2giLCJhIjoiY21rNzkyYWNxMDZpMzNkb2pmNzEzdDlzbSJ9.RtIdGAdIhKDSr9Xtm-GcrA', {
+      attribution: '&copy; <a href="https://www.mapbox.com/about/maps/">Mapbox</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 22,
+      tileSize: 256,
+      zoomOffset: 0
+    }).addTo(map);
+
+    // 3. 1955 Historical Metadata Registry (Colorful on map)
+    const historicalMetadata = {
+      "FPR Yugoslavia": {
+        name: "FPR Yugoslavia",
+        fullName: "Federal People's Republic of Yugoslavia",
+        capital: "Belgrade",
+        history: "Under Josip Broz Tito in 1955, Yugoslavia was a non-aligned socialist state combining six republics (Slovenia, Croatia, Bosnia & Herzegovina, Serbia, Montenegro, Macedonia) and two autonomous provinces. That year saw the signing of the Belgrade Declaration with Khrushchev.",
+        color: "#f59e0b"
+      },
+      "Italy": {
+        name: "Italy",
+        fullName: "Italian Republic",
+        capital: "Rome",
+        history: "Post-WWII democratic republic. In late 1954/1955, the London Memorandum resolved the Free Territory of Trieste disputes between Italy and Yugoslavia.",
+        color: "#10b981"
+      },
+      "France": {
+        name: "France",
+        fullName: "French Fourth Republic",
+        capital: "Paris",
+        history: "Governed under the Fourth Republic in 1955, France was a key founding member of NATO and the European Coal and Steel Community (ECSC).",
+        color: "#3b82f6"
+      },
+      "Switzerland": {
+        name: "Switzerland",
+        fullName: "Swiss Confederation",
+        capital: "Bern",
+        history: "Maintained strict constitutional armed neutrality throughout the Cold War, serving as a hub for international diplomacy.",
+        color: "#ef4444"
+      },
+      "Austria": {
+        name: "Austria",
+        fullName: "Republic of Austria",
+        capital: "Vienna",
+        history: "1955 was historic for Austria: the State Treaty was signed on May 15, ending four-power Allied occupation and establishing permanent constitutional neutrality.",
+        color: "#8b5cf6"
+      },
+      "Albania": {
+        name: "Albania",
+        fullName: "People's Republic of Albania",
+        capital: "Tirana",
+        history: "Governed by Enver Hoxha as a strict Marxist-Leninist state; joined the Warsaw Pact upon its creation in 1955.",
+        color: "#b91c1c"
+      }
+    };
+
+    // 4. Map Layer Group Declarations
+    const historicalBordersLayerGroup = L.layerGroup().addTo(map);
+
+    // 5. Complete Raw GeoJSON User Route Data
+    const rawGeoJSON = {"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[14.241602,40.83514]},"properties":{}},{"type":"Feature","geometry":{"type":"Point","coordinates":[13.250697,41.28958]},"properties":{"label":"Terracina - Latina, Italy"},"bbox":[13.060865,41.238662,13.313833,41.378438]},{"type":"Feature","geometry":{"type":"Point","coordinates":[12.476713,41.899986]},"properties":{"label":"Rome - Rome, Italy"},"bbox":[12.223658,41.635396,12.855875,42.140935]},{"type":"Feature","geometry":{"type":"Point","coordinates":[12.451772,41.903536]},"properties":{"label":"Vatican City"},"bbox":[12.44574,41.900193,12.458366,41.907433]},{"type":"Feature","geometry":{"type":"Point","coordinates":[12.903911,41.469315]},"properties":{"label":"Latina - Latina, Italy"},"bbox":[12.719656,41.366777,13.024698,41.561899]},{"type":"Feature","geometry":{"type":"Point","coordinates":[11.79182,42.09225]},"properties":{"label":"Civitavecchia - Rome, Italy"},"bbox":[11.706678,42.040551,11.872055,42.164193]},{"type":"Feature","geometry":{"type":"Point","coordinates":[11.256129,43.771484]},"properties":{"label":"Florence - Florence, Italy"},"bbox":[11.15059,43.725856,11.339125,43.835217]},{"type":"Feature","geometry":{"type":"Point","coordinates":[11.344672,44.495735]},"properties":{"label":"Bologna - Bologna, Italy"},"bbox":[11.229646,44.421139,11.433704,44.556216]},{"type":"Feature","geometry":{"type":"Point","coordinates":[12.336337,45.436974]},"properties":{"label":"Venice - Venice, Italy"},"bbox":[12.166803,45.227894,12.596546,45.577958]},{"type":"Feature","geometry":{"type":"Point","coordinates":[9.188558,45.463945]},"properties":{"label":"Milan - Milan, Italy"},"bbox":[9.041083,45.386681,9.277905,45.535973]},{"type":"Feature","geometry":{"type":"Point","coordinates":[8.931178,44.408115]},"properties":{"label":"Genoa - Genoa, Italy"},"bbox":[8.66575,44.359237,9.095532,44.519822]},{"type":"Feature","geometry":{"type":"Point","coordinates":[7.4256,43.740444]},"properties":{"label":"Monte Carlo - Monaco"},"bbox":[7.419189,43.737028,7.430769,43.746122]},{"type":"Feature","geometry":{"type":"Point","coordinates":[7.019629,43.553945]},"properties":{"label":"Cannes - 4 Pl. de la Gare, 06400 Cannes, France"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[6.736484,43.432735]},"properties":{"label":"Fréjus - Var, France"},"bbox":[6.685818,43.363339,6.896472,43.533521]},{"type":"Feature","geometry":{"type":"Point","coordinates":[4.627625,43.676247]},"properties":{"label":"Arles - Bouches-du-Rhône, France"},"bbox":[4.426196,43.309806,4.87634,43.76042]},{"type":"Feature","geometry":{"type":"Point","coordinates":[4.808611,43.948715]},"properties":{"label":"Avignon - Vaucluse, France"},"bbox":[4.739283,43.886472,4.927231,43.99664]},{"type":"Feature","geometry":{"type":"Point","coordinates":[3.87727,43.610073]},"properties":{"label":"Montpellier - Hérault, France"},"bbox":[3.807052,43.566742,3.941287,43.653295]},{"type":"Feature","geometry":{"type":"Point","coordinates":[2.146254,43.9261]},"properties":{"label":"Albi - Tarn, France"},"bbox":[2.052876,43.888476,2.211823,43.96959]},{"type":"Feature","geometry":{"type":"Point","coordinates":[4.390536,45.4351]},"properties":{"label":"Saint-Étienne - Loire, France"},"bbox":[4.244056,45.372336,4.488879,45.476731]},{"type":"Feature","geometry":{"type":"Point","coordinates":[7.98813,46.319457]},"properties":{"label":"Brig - Bahnhofstrasse 1, 3900 Brig-Glis, Switzerland"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[8.303875,47.05158]},"properties":{"label":"Lucerne - Lucerne, Switzerland"},"bbox":[8.21004,47.0264,8.35824,47.07657]},{"type":"Feature","geometry":{"type":"Point","coordinates":[8.541096,47.369733]},"properties":{"label":"Zürich - Zurich, Switzerland"},"bbox":[8.448018,47.320218,8.625307,47.434665]},{"type":"Feature","geometry":{"type":"Point","coordinates":[9.531652,46.850756]},"properties":{"label":"Chur - the Grisons, Switzerland"},"bbox":[9.484099,46.818032,9.580669,46.888319]},{"type":"Feature","geometry":{"type":"Point","coordinates":[9.820619,46.793144]},"properties":{"label":"Davos - the Grisons, Switzerland"},"bbox":[9.669126,46.670259,9.967073,46.859649]},{"type":"Feature","geometry":{"type":"Point","coordinates":[14.284805,48.305813]},"properties":{"label":"Linz - Upper Austria, Austria"},"bbox":[14.24572,48.211371,14.409217,48.378687]},{"type":"Feature","geometry":{"type":"Point","coordinates":[16.372504,48.208354]},"properties":{"label":"Vienna - Austria"},"bbox":[16.18183,48.117903,16.577514,48.322655]},{"type":"Feature","geometry":{"type":"Point","coordinates":[15.437514,47.07052]},"properties":{"label":"Graz - Styria, Austria"},"bbox":[15.349714,47.011887,15.5342,47.134501]},{"type":"Feature","geometry":{"type":"Point","coordinates":[15.645585,46.557644]},"properties":{"label":"Maribor - Slovenia"},"bbox":[15.517014,46.499486,15.772172,46.63429]},{"type":"Feature","geometry":{"type":"Point","coordinates":[15.858805,45.797905]},"properties":{"label":"Porsche Zagreb Jankomir - Ul. Velimira Škorpika 23, 10090 Zagreb, Croatia"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[19.845444,45.25558]},"properties":{"label":"Novi Sad - South Bačka District, Serbia"},"bbox":[19.720375,45.221257,19.931645,45.425147]},{"type":"Feature","geometry":{"type":"Point","coordinates":[20.456897,44.817813]},"properties":{"label":"Belgrade - Serbia"},"bbox":[19.975565,44.262744,20.853802,45.096809]},{"type":"Feature","geometry":{"type":"Point","coordinates":[21.710295,43.53975]},"properties":{"label":"Aleksinac - Nišava District, Serbia"},"bbox":[21.657374,43.492157,21.78276,43.594328]},{"type":"Feature","geometry":{"type":"Point","coordinates":[21.894835,43.318123]},"properties":{"label":"Niš - Nišava District, Serbia"},"bbox":[21.806357,43.225255,22.042217,43.40273]},{"type":"Feature","geometry":{"type":"Point","coordinates":[21.271685,43.138374]},"properties":{"label":"Kuršumlija - Toplica District, Serbia"},"bbox":[21.137887,43.028939,21.360812,43.198057]},{"type":"Feature","geometry":{"type":"Point","coordinates":[21.436986,42.000864]},"properties":{"label":"Old Bazaar - Skopje Old Town - MK, 1000 Skopje, North Macedonia"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[20.518488,43.142406]},"properties":{"label":"Novi Pazar - Raška District, Serbia"},"bbox":[20.304011,43.002363,20.693266,43.263393]},{"type":"Feature","geometry":{"type":"Point","coordinates":[19.869934,42.834193]},"properties":{"label":"Ivangradska - 84300 Berane, Montenegro"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[19.09103,42.246007]},"properties":{"label":"Lake Skadar National Park Visitors Centre - P16, 81305 Bar, Montenegro"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[17.649872,43.053726]},"properties":{"label":"Metković - Dubrovnik-Neretva, Croatia"},"bbox":[17.593153,43.016635,17.673165,43.076067]},{"type":"Feature","geometry":{"type":"Point","coordinates":[15.890731,43.7351]},"properties":{"label":"Šibenik - Šibenik-Knin, Croatia"},"bbox":[15.826444,43.692523,15.944787,43.789732]},{"type":"Feature","geometry":{"type":"Point","coordinates":[15.375662,44.54599]},"properties":{"label":"Gospić - Lika-Senj, Croatia"},"bbox":[15.342409,44.520098,15.428184,44.581273]},{"type":"Feature","geometry":{"type":"Point","coordinates":[14.442651,45.326084]},"properties":{"label":"Rijeka - Primorje-Gorski Kotar, Croatia"},"bbox":[14.331953,45.307442,14.530963,45.384048]},{"type":"Feature","properties":{},"geometry":{"type":"LineString","coordinates":[[14.245856,40.833309],[14.156081,40.839778],[14.100506,40.85433],[14.068444,40.886658],[14.047069,40.922199],[14.047069,40.952879],[14.017144,40.970634],[14.000044,40.988385],[13.963706,41.019033],[13.948744,41.048056],[13.929506,41.089955],[13.908131,41.131827],[13.869657,41.164019],[13.831182,41.202627],[13.794844,41.233176],[13.734994,41.260497],[13.696519,41.289413],[13.615295,41.292625],[13.583232,41.284595],[13.52552,41.265318],[13.469945,41.276563],[13.425057,41.287807],[13.386583,41.299049],[13.331008,41.305472],[13.305358,41.305472],[13.250697,41.28958],[13.134358,41.279776],[13.080921,41.300655],[13.040308,41.334368],[13.001833,41.358438],[12.967633,41.380896],[12.948396,41.398536],[12.927021,41.420979],[12.903911,41.469315],[12.810452,41.461207],[12.761352,41.473471],[12.684976,41.506163],[12.630421,41.542922]]}},{"type":"Feature","properties":{},"geometry":{"type":"LineString","coordinates":[[12.616144,41.550741],[12.5404,41.619986],[12.468863,41.65458],[12.36787,41.739415],[12.313165,41.811594],[12.245837,41.883691],[12.170092,41.946318],[12.094347,41.983865],[12.010186,42.037018],[11.942857,42.068264],[11.875529,42.080758],[11.795576,42.09325]]}},{"type":"Feature","properties":{},"geometry":{"type":"LineString","coordinates":[[13.243744,41.289297],[13.238646,41.327587],[13.223354,41.379244],[13.205513,41.451876],[13.195318,41.533967],[13.144343,41.593084],[13.085722,41.652148],[13.030656,41.706278],[12.98381,41.750563],[12.924472,41.808786]]}},{"type":"Feature","properties":{},"geometry":{"type":"LineString","coordinates":[[12.922035,41.809113],[12.88951,41.841429],[12.859696,41.853543],[12.810908,41.871711],[12.747213,41.889873],[12.687584,41.908029],[12.623889,41.922148],[12.590009,41.923156],[12.539866,41.922148],[12.495144,41.909038],[12.472106,41.905004],[12.447712,41.896934],[12.395846,41.911974],[12.356775,41.929733],[12.298626,41.947306],[12.244757,41.964474],[12.217923,41.964474],[12.184381,41.959486],[12.173477,41.958416],[12.166737,41.957664],[12.159214,41.956136],[12.155264,41.95374]]}},{"type":"Feature","properties":{},"geometry":{"type":"LineString","coordinates":[[11.782882,42.100469],[11.748534,42.173695],[11.714187,42.278611],[11.619732,42.33259],[11.495223,42.396036],[11.366421,42.449915],[11.280553,42.49425],[11.229032,42.544881],[11.160337,42.62707],[11.083056,42.705994],[11.010068,42.756454],[10.928493,42.832065],[10.864092,42.91073],[10.799691,42.970447],[10.718116,43.004994],[10.679475,43.036384],[10.658008,43.095979],[10.636541,43.14612],[10.61078,43.19622],[10.563553,43.26504],[10.529206,43.32129],[10.503445,43.374367],[10.477685,43.421161],[10.443337,43.452337],[10.40899,43.483497],[10.366056,43.51464],[10.357469,43.542656],[10.39611,43.592429],[10.503445,43.614192],[10.640834,43.645269],[10.756756,43.667013],[10.907026,43.710477],[10.997187,43.738401]]}},{"type":"Feature","properties":{},"geometry":{"type":"LineString","coordinates":[[10.996202,43.738096],[11.060035,43.755267],[11.111809,43.765878],[11.160085,43.770426],[11.195768,43.770931],[11.221655,43.772952],[11.256129,43.771484]]}},{"type":"Feature","properties":{},"geometry":{"type":"LineString","coordinates":[[11.233738,43.781868],[11.275269,43.846799],[11.254503,43.951538],[11.254503,44.071015],[11.247581,44.195214],[11.28219,44.338958],[11.3168,44.432944],[11.344487,44.5021],[11.420627,44.620463],[11.517533,44.738586],[11.655969,44.944721],[11.77364,45.081734],[11.912077,45.208667],[12.015904,45.340183],[12.0782,45.398537],[12.133575,45.447119],[12.334308,45.437406]]}},{"type":"Feature","properties":{},"geometry":{"type":"LineString","coordinates":[[12.316009,45.436026],[11.982609,45.586425],[11.739226,45.629391],[11.541724,45.639035],[11.390552,45.631852],[11.251463,45.665023],[11.030605,45.649539],[10.809943,45.649878],[10.45001,45.633302],[10.206217,45.624322],[10.032198,45.607154],[9.823497,45.58133],[9.568885,45.530288],[9.383765,45.495746],[9.187308,45.4526]]}},{"type":"Feature","properties":{},"geometry":{"type":"LineString","coordinates":[[9.152314,45.481994],[9.095228,45.186558],[9.096162,44.981569],[9.096777,44.842187],[9.062885,44.678104],[9.028854,44.571383],[8.98339,44.472785],[8.93779,44.415172]]}},{"type":"Feature","properties":{},"geometry":{"type":"LineString","coordinates":[[8.901594,44.433735],[8.683168,44.468748],[8.498723,44.46198],[8.382631,44.372332],[8.324612,44.315127],[8.220446,44.208767],[8.128296,44.135127],[8.024864,44.044958],[7.876065,43.954715],[7.659246,43.88889],[7.420341,43.756539]]}},{"type":"Feature","properties":{},"geometry":{"type":"LineString","coordinates":[[7.409151,43.762437],[7.257069,43.761782],[7.127313,43.690222],[7.084257,43.650573],[7.030788,43.57142],[6.84742,43.491015],[6.761255,43.450702],[6.610519,43.385827],[6.4491,43.320484],[6.287364,43.27851],[6.124988,43.267862],[5.92994,43.256277],[5.733863,43.275941],[5.624032,43.313082],[5.578685,43.375386],[5.45635,43.451628],[5.3677,43.489003],[5.301564,43.503146],[5.168248,43.555025],[4.991212,43.589674],[4.826292,43.584805],[4.710572,43.628689],[4.627625,43.676247],[4.727286,43.803857],[4.808611,43.948715],[4.618644,43.906304],[4.510001,43.85209],[4.426429,43.773692],[4.322507,43.728401],[4.218978,43.703458],[4.106821,43.672265],[4.037802,43.653542],[3.87727,43.610073]]}},{"type":"Feature","properties":{},"geometry":{"type":"LineString","coordinates":[[3.848831,43.626696],[3.533399,43.660269],[3.398874,43.588342],[3.179887,43.58337],[2.958183,43.637189],[2.749463,43.690957],[2.527144,43.724182],[2.304629,43.747084],[2.191274,43.792978],[2.144827,43.88061],[2.144827,43.88061],[2.246188,44.062005],[2.47365,44.236832],[2.862633,44.543208],[3.120743,44.697004],[3.378406,44.879629],[3.584162,44.981842],[3.858684,45.133932],[4.078778,45.264986],[4.230011,45.375194],[4.340818,45.435522]]}},{"type":"Feature","properties":{},"geometry":{"type":"LineString","coordinates":[[4.348128,45.434058],[4.759132,45.639248],[4.97422,45.729605],[5.106089,45.793027],[5.402565,45.943703],[5.717378,46.082133],[5.98446,46.171431],[6.235448,46.247918],[6.418739,46.322273],[6.621413,46.349997],[6.824535,46.365692],[7.078398,46.381888],[7.366706,46.374713],[7.62078,46.36643],[7.824139,46.345438],[7.959711,46.323489],[7.959711,46.323489],[8.091119,46.522633],[8.122697,46.651029],[8.154607,46.7678],[8.237408,46.908265],[8.286422,47.048535],[8.369982,47.189057],[8.420208,47.282732],[8.539345,47.388408],[8.711845,47.342234],[8.798085,47.295709],[8.918512,47.237506],[8.98723,47.179195],[9.158223,46.992519],[9.260332,46.910782],[9.396548,46.887171],[9.464426,46.851999],[9.634728,46.85132],[9.804205,46.792134]]}},{"type":"Feature","properties":{},"geometry":{"type":"LineString","coordinates":[[9.791498,46.800606],[10.096747,46.875181],[10.194863,46.94221],[10.369291,47.009155],[10.707246,47.083441],[10.947084,47.105706],[11.099709,47.157623],[11.361351,47.261304],[11.590288,47.350012],[11.753815,47.379548],[12.048162,47.423822],[12.255296,47.453317],[12.418822,47.497528],[12.582349,47.578486],[12.909402,47.703356],[13.105633,47.798644],[13.105633,47.798644],[13.258258,47.857196],[13.443588,47.937597],[13.552606,47.988697],[13.803346,48.134416],[13.955971,48.178052],[14.086792,48.243436],[14.174006,48.286978],[14.283024,48.308736],[14.479255,48.323236],[14.773603,48.315986],[14.958933,48.315986],[15.078852,48.294232],[15.285986,48.301484],[15.482218,48.301484],[15.711155,48.286978],[15.950993,48.286978],[16.092716,48.250695],[16.212636,48.243436],[16.36526,48.214387]]}},{"type":"Feature","properties":{},"geometry":{"type":"LineString","coordinates":[[16.365219,48.21861],[16.400251,48.119311],[16.365219,48.008103],[16.286396,47.902527],[16.137509,47.779081],[16.032412,47.661241],[15.936073,47.554957],[15.804702,47.50765],[15.673331,47.466222],[15.49817,47.448457],[15.366798,47.383267],[15.331766,47.294242],[15.31425,47.199116],[15.323008,47.187214],[15.437514,47.07052],[15.437514,47.07052],[15.49817,46.924678],[15.524444,46.822898],[15.568234,46.708914],[15.645585,46.557644]]}},{"type":"Feature","properties":{},"geometry":{"type":"LineString","coordinates":[[15.622528,46.564591],[15.727625,46.419883],[15.736383,46.292947],[15.771415,46.171782],[15.815206,45.977361],[15.79769,45.892086],[15.850238,45.794469],[16.060432,45.812785],[16.270626,45.843299],[16.542126,45.837197],[16.813626,45.80668],[17.02382,45.800575],[17.146433,45.770038],[17.356627,45.745596],[17.531788,45.727258],[17.715708,45.684445],[17.855837,45.653844],[18.004724,45.623226],[18.144853,45.604848],[18.144853,45.604848],[18.24995,45.586463],[18.530209,45.568073],[18.714128,45.531274],[18.950596,45.506728],[19.125758,45.482171],[19.423532,45.408436],[19.537387,45.377684],[19.642484,45.353071],[19.686275,45.328448],[19.835162,45.254512],[20.001565,45.192825],[20.132936,45.131071],[20.281824,45.007363],[20.378162,44.908204],[20.456985,44.821299]]}},{"type":"Feature","properties":{},"geometry":{"type":"LineString","coordinates":[[20.425077,44.822443],[20.591481,44.679389],[20.722852,44.560947],[20.941804,44.335867],[21.073175,44.185332],[21.344675,43.977717],[21.528595,43.794667],[21.633692,43.661761],[21.721272,43.54126],[21.808853,43.433238],[21.896434,43.325023],[21.896434,43.325023],[21.931466,43.274032],[21.87016,43.139976],[21.817611,43.114408],[21.738788,42.992814],[21.738788,42.864561],[21.773821,42.768195],[21.817611,42.652359],[21.800095,42.523398],[21.817611,42.39417],[21.817611,42.39417],[21.861402,42.277637],[21.826369,42.199829],[21.721272,42.12842],[21.598659,42.043924],[21.519837,42.017903],[21.449772,42.004888]]}},{"type":"Feature","properties":{},"geometry":{"type":"LineString","coordinates":[[21.4342,42.003813],[21.384718,41.984626],[21.300815,41.941434],[21.263962,41.913683],[21.208188,41.877702],[21.178442,41.850011],[21.146837,41.823693],[21.105936,41.78489],[21.052021,41.737739],[21.012979,41.709987],[20.953486,41.671115],[20.908867,41.65167],[20.873543,41.637777],[20.799178,41.614152],[20.761995,41.594689],[20.70808,41.564094],[20.682052,41.551573],[20.650447,41.540442],[20.615123,41.527917],[20.581658,41.523741]]}},{"type":"Feature","properties":{},"geometry":{"type":"LineString","coordinates":[[21.424613,42.012498],[21.417467,42.129192],[21.39603,42.240383],[21.388885,42.282689],[21.374594,42.33025],[21.360302,42.41999],[21.338866,42.514869],[21.338866,42.583303],[21.324574,42.646406],[21.324574,42.725195],[21.295992,42.809126],[21.295992,42.898179],[21.288846,42.950503],[21.288846,43.008008],[21.26741,43.049796],[21.26741,43.148929],[21.26741,43.148929],[21.131643,43.17499],[20.988731,43.206248],[20.881547,43.201039],[20.74578,43.201039],[20.638596,43.19583],[20.517121,43.148929],[20.431374,43.070679],[20.245588,42.976648],[19.938327,42.835332],[19.866871,42.835332],[19.709668,42.756683],[19.55961,42.688439],[19.466718,42.588564],[19.359533,42.472718],[19.288077,42.393609],[19.188039,42.293262],[19.088001,42.250962]]}},{"type":"Feature","properties":{},"geometry":{"type":"Point","coordinates":[29.893401,31.212594]}},{"type":"Feature","properties":{},"geometry":{"type":"LineString","coordinates":[[29.702097,31.263103],[27.124934,32.096527],[25.352938,32.700881],[23.743318,33.457161],[21.395462,33.839189],[20.006374,33.950613],[18.187793,33.679037],[16.512301,33.81858],[14.569295,34.320852],[13.063843,35.092501],[12.251278,36.08815],[11.934211,36.908893],[11.507887,37.681911],[11.382801,38.433165],[11.874058,39.259754],[12.831219,39.666321],[13.483403,40.012819],[13.889511,40.187538],[14.208382,40.876089]]}},{"type":"Feature","properties":{},"geometry":{"type":"Point","coordinates":[13.76786,45.65185]}},{"type":"Feature","properties":{},"geometry":{"type":"LineString","coordinates":[[19.091626,42.252123],[18.795326,42.43248],[18.464168,42.54173],[18.176583,42.68283],[18.002289,42.772453],[17.801851,42.893879],[17.740848,42.970445],[17.653701,43.053285],[17.479407,43.123293],[17.270254,43.263069],[17.07853,43.351851],[16.878092,43.472133],[16.642795,43.547977],[16.459787,43.585863],[16.22449,43.636342],[16.024052,43.680475],[15.936905,43.730874],[15.893331,43.743467],[15.736467,43.881816],[15.684178,43.994772],[15.701608,44.076218],[15.692893,44.157552],[15.579602,44.301177],[15.475026,44.382201],[15.457596,44.432006],[15.387879,44.487986],[15.379164,44.550124],[15.292017,44.680396],[15.231014,44.742328],[15.170011,44.841281],[15.082864,44.940065],[14.978288,45.063306],[14.891141,45.137123],[14.742991,45.235397],[14.6297,45.302863],[14.551267,45.327376],[14.437976,45.327376],[14.324685,45.351878],[14.193965,45.388612],[14.054529,45.437553],[13.976097,45.486451],[13.88895,45.571922],[13.845377,45.608513],[13.766944,45.651171]]}},{"type":"Feature","properties":{},"geometry":{"type":"LineString","coordinates":[[13.717528,45.685088],[13.109414,45.507768],[13.329265,44.891176],[13.878838,44.496471],[14.46238,44.009711],[15.160647,43.53748],[15.827192,43.12361],[16.445064,42.767843],[17.298285,42.206175],[18.019117,41.67051],[18.577639,41.301709],[18.919065,40.752265],[18.978321,40.303198],[19.079315,39.865996],[19.293714,39.249663],[19.639214,38.081386],[20.613421,36.756731],[21.809909,35.782806],[23.399317,34.983554],[24.933782,33.987485],[26.352037,33.324169],[27.555148,32.731211],[29.04157,32.070806],[29.893401,31.212594]]}}]};
+
+    // 6. Setup Route Line and Waypoint layers
+    const namedWaypoints = {
+      "type": "FeatureCollection",
+      "features": rawGeoJSON.features.filter(f => f.geometry.type === "Point" && f.properties && f.properties.label)
+    };
+    const waypointsLayer = L.geoJSON(namedWaypoints, {
+      pointToLayer: function(feature, latlng) {
+        return L.circleMarker(latlng, {
+           radius: 5,
+           fillColor: "#ef4444",
+           color: "#ffffff",
+           weight: 2,
+           fillOpacity: 0.95
+         });
+      },
+      onEachFeature: function(feature, layer) {
+        layer.bindPopup(`
+          <div class="p-1 font-sans">
+            <span class="text-xs uppercase tracking-wider text-slate-400 font-semibold block">Waypoint</span>
+            <strong class="text-slate-100 text-sm font-medium">${feature.properties.label}</strong>
+          </div>
+        `);
+      }
+    });
+
+    const routeLineCoords = rawGeoJSON.features
+      .filter(f => f.geometry.type === "LineString")
+      .map(f => f.geometry.coordinates);
+    const routeLinesLayer = L.geoJSON({
+      "type": "Feature",
+      "geometry": { "type": "MultiLineString", "coordinates": routeLineCoords }
+    }, {
+      style: {
+         color: "#38bdf8",
+         weight: 3,
+         opacity: 0.85,
+        dashArray: "4, 6"
+      }
+    });
+    const routeGroup = L.layerGroup([routeLinesLayer, waypointsLayer]).addTo(map);
+
+    // 7. Dynamic Fetching & High-Precision Spatial Merging of 1955 Borders (Colorful Map / Blue Legend)
+    fetch('https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_countries.geojson')
+      .then(response => {
+        if (!response.ok) throw new Error("Network error loading boundary data.");
+        return response.json();
+      })
+      .then(globalGeoJSON => {
+        const features1955 = [];
+        
+        // --- A. DISSOLVE/MERGE YUGOSLAVIA ---
+        const yugoslaviaConstituents = [
+          "Slovenia", "Croatia", "Bosnia and Herzegovina", "Bosnia and Herz.", 
+          "Serbia", "Montenegro", "North Macedonia", "Kosovo"
+        ];
+        
+        const yugoFeatures = globalGeoJSON.features.filter(f => {
+          const name = f.properties.NAME || f.properties.ADMIN;
+          return yugoslaviaConstituents.includes(name);
+        });
+
+        if (yugoFeatures.length > 0) {
+          try {
+            let validFeatures = yugoFeatures.map(f => turf.cleanCoords(f));
+            let mergedYugo = validFeatures[0];
+            for (let i = 1; i < validFeatures.length; i++) {
+              try {
+                const unioned = turf.union(mergedYugo, validFeatures[i]);
+                if (unioned) mergedYugo = unioned;
+              } catch (innerErr) {
+                console.warn("Skipping faulty union geometry for constituent", innerErr);
+              }
+            }
+            mergedYugo.properties = { historicName: "FPR Yugoslavia" };
+            features1955.push(mergedYugo);
+          } catch (e) {
+            console.warn("Turf union fallback for Yugoslavia", e);
+            features1955.push({
+              type: "Feature",
+              properties: { historicName: "FPR Yugoslavia" },
+              geometry: { type: "GeometryCollection", geometries: yugoFeatures.map(f => f.geometry) }
+            });
+          }
+        }
+
+        // --- B. RETAINED METADATA MAPPING ---
+        const standardCountryMapping = {
+          "Italy": "Italy",
+          "France": "France",
+          "Switzerland": "Switzerland",
+          "Austria": "Austria",
+          "Albania": "Albania"
+        };
+
+        globalGeoJSON.features.forEach(f => {
+          const name = f.properties.NAME || f.properties.ADMIN;
+          const mappedHistoricName = standardCountryMapping[name];
+          if (mappedHistoricName) {
+            if (!features1955.some(alreadyAdded => alreadyAdded.properties.historicName === mappedHistoricName)) {
+              f.properties.historicName = mappedHistoricName;
+              features1955.push(f);
+            }
+          }
+        });
+
+        // --- C. RENDER HISTORICAL BORDERS LAYER ---
+        const historicalBordersGeoJSON = {
+          type: "FeatureCollection",
+          features: features1955
+        };
+
+        const renderLayer = L.geoJSON(historicalBordersGeoJSON, {
+          style: function(feature) {
+            const historicKey = feature.properties.historicName;
+            const meta = historicalMetadata[historicKey] || {};
+            return {
+              color: meta.color || "#ca8a04",
+              weight: 2.2,
+              opacity: 0.9,
+              fillColor: meta.color || "#eab308",
+              fillOpacity: 0.28
+            };
+          },
+          onEachFeature: function(feature, layer) {
+            const historicKey = feature.properties.historicName;
+            const meta = historicalMetadata[historicKey];
+            if (meta) {
+              const popupHtml = `
+                <div class="p-2 font-sans max-w-xs">
+                  <div class="flex items-center space-x-2 mb-1.5 border-b border-slate-700/60 pb-2">
+                    <span class="w-3 h-3 rounded-full inline-block" style="background-color: ${meta.color}"></span>
+                    <h3 class="font-bold text-base text-slate-100">${meta.name}</h3>
+                  </div>
+                  <p class="text-xs text-slate-300 mb-1"><strong>Official Name:</strong> ${meta.fullName}</p>
+                  <p class="text-xs text-slate-300 mb-2"><strong>Capital:</strong> ${meta.capital}</p>
+                  <div class="bg-slate-900/60 p-2 rounded border border-slate-700/40 text-[11px] text-slate-300 leading-relaxed">
+                    ${meta.history}
+                  </div>
+                </div>
+              `;
+              layer.bindPopup(popupHtml);
+              layer.on({
+                mouseover: (e) => {
+                  const targetLayer = e.target;
+                  targetLayer.setStyle({
+                    fillOpacity: 0.5,
+                    weight: 3.5,
+                    opacity: 1
+                  });
+                  targetLayer.bringToFront();
+                  if (typeof routeGroup !== 'undefined' && routeGroup) {
+                    routeGroup.bringToFront();
+                  }
+                  targetLayer.bindTooltip(meta.name, {
+                    direction: 'top',
+                    sticky: true,
+                    className: 'country-hover-tooltip'
+                  }).openTooltip();
+                },
+                mouseout: (e) => {
+                  renderLayer.resetStyle(e.target);
+                  e.target.closeTooltip();
+                }
+              });
+            }
+          }
+        });
+        renderLayer.addTo(historicalBordersLayerGroup);
+        
+        const loader = document.getElementById('loading-screen');
+        if (loader) {
+          loader.style.opacity = '0';
+          setTimeout(() => loader.remove(), 400);
+        }
+      })
+      .catch(error => {
+        console.error("Error generating 1955 historical boundaries:", error);
+        const loader = document.getElementById('loading-screen');
+        if (loader) {
+          loader.innerHTML = `
+            <div class="bg-red-950/80 p-6 rounded-xl border border-red-800 text-red-200">
+              <h3 class="font-bold mb-2 text-base">Failed to load boundary datasets</h3>
+              <p class="text-xs">Please check your internet connection and refresh the page.</p>
+            </div>
+          `;
+        }
+      });
+
+    // 8. Add Layer Controls (with blue legends)
+    const overlayMaps = {
+      "<span class='text-blue-400 font-semibold text-xs'>1955 Historical Borders</span>": historicalBordersLayerGroup,
+      "<span class='text-blue-400 font-semibold text-xs'>Travel Route & Waypoints</span>": routeGroup
+    };
+    L.control.layers(null, overlayMaps, { 
+       position: 'topright', 
+       collapsed: false 
+    }).addTo(map);
+
+    // 9. Auto-fit bounds to route
+    const bounds = routeLinesLayer.getBounds().extend(waypointsLayer.getBounds());
+    if (bounds.isValid()) {
+      map.fitBounds(bounds, { padding: [40, 40] });
+    }
+  </script>
+</body>
+</html>
